@@ -60,47 +60,53 @@ async function getUserById(userId) {
   try {
     const {
       rows: [user],
-    } = await client.query(
-      ` SELECT username, name, location FROM users
-          WHERE id=$1;`,
-      [userId]
-    );
-    if (rows.length < 1) {
+    } = await client.query(`
+      SELECT id, username, name, location, active
+      FROM users
+      WHERE id=${userId}
+    `);
+
+    if (!user) {
       return null;
     }
+
     user.posts = await getPostsByUser(userId);
+
     return user;
   } catch (error) {
-    console.error(error);
+    throw error;
   }
 }
 
-async function createPost({ authorId, title, content }) {
+async function createPost({ authorId, title, content, tags = [] }) {
   try {
     const {
       rows: [post],
     } = await client.query(
       `
-      INSERT INTO posts(authorId, title, content)
+      INSERT INTO posts("authorId", title, content)
       VALUES($1, $2, $3)
-      ON CONFLICT (authorId) DO NOTHING
       RETURNING *;
       `,
       [authorId, title, content]
     );
-    return post;
+    const tagList = await createTags(tags);
+
+    return await addTagsToPost(post.id, tagList);
   } catch (error) {
     console.error(error);
   }
 }
 
 async function updatePost(postId, fields = {}) {
+  const { tags } = fields;
+  console.log("-------TAGS IN UPDATE POST----------", tags);
+  console.log("FIELDS----------->", fields);
+  delete fields.tags;
   const setString = Object.keys(fields)
     .map((key, index) => `"${key}"=$${index + 1}`)
     .join(", ");
-  if (setString.length === 0) {
-    return;
-  }
+
   console.log("Table Keys Len", Object.keys(fields).length);
   try {
     if (setString.length > 0) {
@@ -132,7 +138,7 @@ async function updatePost(postId, fields = {}) {
 
     await addTagsToPost(postId, tagList);
 
-    return await getPostsById(postId);
+    return await getPostById(postId);
   } catch (error) {
     console.error(error);
   }
@@ -144,7 +150,7 @@ async function getAllPosts() {
       SELECT id
       FROM posts;
     `);
-
+    console.log("Post Id's : ", postIds);
     const posts = await Promise.all(
       postIds.map((post) => getPostById(post.id))
     );
@@ -210,7 +216,7 @@ async function getPostsByUser(userId) {
     );
 
     const posts = await Promise.all(
-      postIds.map((post) => getPostsById(post.id))
+      postIds.map((post) => getPostById(post.id))
     );
     return posts;
   } catch (error) {
@@ -242,6 +248,7 @@ async function getPostsByTagName(tagName) {
  */
 
 async function createTags(tagList) {
+  console.log("-----------------------CREATING TAGS------------------------");
   if (tagList.length === 0) {
     return [];
   }
@@ -274,6 +281,8 @@ async function createTags(tagList) {
     `,
       tagList
     );
+
+    console.log("-------------------THIS SHOULD BE TAGS FROM DB: ", rows);
 
     return rows;
   } catch (error) {
