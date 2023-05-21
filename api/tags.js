@@ -10,11 +10,15 @@ tagsRouter.use((req, res, next) => {
 const { getAllTags } = require("../db");
 
 tagsRouter.get("/", async (req, res) => {
-  const tags = await getAllTags();
+  try {
+    const tags = await getAllTags();
 
-  res.send({
-    tags,
-  });
+    res.send({
+      tags,
+    });
+  } catch ({ name, message }) {
+    next({ name, message });
+  }
 });
 
 module.exports = tagsRouter;
